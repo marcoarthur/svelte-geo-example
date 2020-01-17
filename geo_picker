@@ -1,39 +1,12 @@
 #!/usr/bin/env perl
-use Mojolicious::Lite -signatures;
+use Mojolicious::Lite -signatures, -async;
 use DDP;
 
 use constant {
   OSM_API => 'https://overpass-api.de/api/interpreter',
 };
 
-helper settings => sub( $c ) {
-
-  # TODO: loop through routes and set path to their route names
-  return {
-    path => {
-      url  => $c->url_for('root')->to_abs,
-      bbox => $c->url_for('bbox')->to_abs,
-    },
-  };
-};
-
-get '/' => sub ( $c ) {
-  $c->render(template => 'index', settings => $c->settings);
-} => 'root';
-
-post 'geo/bbox' => sub ( $c ) {
-  $c->app->log->debug('Getting bound box');
-
-  # TODO: subprocess the bound box
-  my $geojson = $c->req->json;
-  my $q       = osm_query($geojson);
-  p $q;
-  $c->render(text => $q);
-} => 'bbox';
-
-# TODO: make a real querier, but by now only a simple idea on
-# how it should look like the output
-sub osm_query ( $geom ) {
+helper query_osm => sub ($c, $geom) {
 
   # coordinates is giving as [ long, lat ]
   my @coordinates = @{$geom->{geometry}->{coordinates}->[0]};
@@ -52,16 +25,40 @@ node
 out;
 EOQ
 
-  my $tx
-    = app->ua->post(OSM_API() => {Accept => '*/*'} => form => {data => $query});
+  return $c->app->ua->post_p(OSM_API() => {Accept => '*/*'} => form => {data => $query});
 
-  if ( $tx->result->is_success ) {
-    return $tx->result->body;
-  } else {
-    warn "Failed: ";
-    return $tx->result->message;
-  }
-}
+};
+
+helper settings => sub( $c ) {
+
+  # TODO: loop through routes and set path to their route names
+  return {
+    path => {
+      url  => $c->url_for('root')->to_abs,
+      bbox => $c->url_for('bbox')->to_abs,
+    },
+  };
+};
+
+get '/' => sub ( $c ) {
+  $c->render(template => 'index', settings => $c->settings);
+} => 'root';
+
+post 'geo/bbox' => sub ( $c ) {
+  $c->app->log->debug('Receiving bound box');
+  $c->render_later;
+
+  # TODO: subprocess the bound box
+  my $geojson = $c->req->json;
+  my $q       = $c->query_osm($geojson);
+
+  $q->then( sub ($tx) {
+    $c->render( json => $tx->result->json );
+  })->catch( sub ($err) {
+    warn "Failed: $err";
+    $c->render( text => $err, code => 503 );
+  });
+} => 'bbox';
 
 app->start;
 
