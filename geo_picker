@@ -1,0 +1,89 @@
+#!/usr/bin/env perl
+use Mojolicious::Lite -signatures;
+use DDP;
+
+use constant {
+  OSM_API => 'https://overpass-api.de/api/interpreter',
+};
+
+helper settings => sub( $c ) {
+
+  # TODO: loop through routes and set path to their route names
+  return {
+    path => {
+      url  => $c->url_for('root')->to_abs,
+      bbox => $c->url_for('bbox')->to_abs,
+    },
+  };
+};
+
+get '/' => sub ( $c ) {
+  $c->render(template => 'index', settings => $c->settings);
+} => 'root';
+
+post 'geo/bbox' => sub ( $c ) {
+  $c->app->log->debug('Getting bound box');
+
+  # TODO: subprocess the bound box
+  my $geojson = $c->req->json;
+  my $q       = osm_query($geojson);
+  p $q;
+  $c->render(text => $q);
+} => 'bbox';
+
+# TODO: make a real querier, but by now only a simple idea on
+# how it should look like the output
+sub osm_query ( $geom ) {
+
+  # coordinates is giving as [ long, lat ]
+  my @coordinates = @{$geom->{geometry}->{coordinates}->[0]};
+  my @sorted
+    = sort { $a->[0] <=> $b->[0] and $a->[1] <=> $b->[1] } @coordinates;
+  my $bottom = shift @sorted;
+  my $upper  = pop @sorted;
+
+  # osm query requires [ lat, long ]
+  my $str   = join(',', reverse(@$bottom), reverse(@$upper));
+  my $query = <<EOQ;
+[out:json];
+node
+  [amenity=school]
+  ($str);
+out;
+EOQ
+
+  my $tx
+    = app->ua->post(OSM_API() => {Accept => '*/*'} => form => {data => $query});
+
+  if ( $tx->result->is_success ) {
+    return $tx->result->body;
+  } else {
+    warn "Failed: ";
+    return $tx->result->message;
+  }
+}
+
+app->start;
+
+__DATA__
+
+@@ index.html.ep
+% use Mojo::JSON qw(to_json);
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset='utf-8'>
+		<meta name='viewport' content='width=device-width,initial-scale=1'>
+
+		<title>Svelte app</title>
+		<link rel='icon' type='image/png' href='/favicon.png'>
+		<link rel='stylesheet' href='/global.css'>
+		<link rel='stylesheet' href='/build/bundle.css'>
+
+        <script>window.__app_settings = <%== to_json $settings %> </script>
+		<script defer src='/build/bundle.js'></script>
+	</head>
+
+	<body>
+	</body>
+</html>
