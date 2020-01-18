@@ -1,13 +1,22 @@
 #!/usr/bin/env perl
-use Mojolicious::Lite -signatures, -async;
+use Mojolicious::Lite -signatures;
+use Mojo::Redis;
+use Digest::MD5;
 use DDP;
 
 use constant {
   OSM_API => 'https://overpass-api.de/api/interpreter',
 };
 
-helper query_osm => sub ($c, $geom) {
+helper digest => sub {
+  state $h = Digest::MD5->new();
+};
 
+helper db => sub { 
+  state $redis = Mojo::Redis->new->db;
+};
+
+helper query_osm => sub ($c, $geom) {
   # coordinates is giving as [ long, lat ]
   my @coordinates = @{$geom->{geometry}->{coordinates}->[0]};
   my @sorted
@@ -25,8 +34,24 @@ node
 out;
 EOQ
 
-  return $c->app->ua->post_p(OSM_API() => {Accept => '*/*'} => form => {data => $query});
+  # check redis first
+  my $res = undef;
+  my $key = $c->digest->add($query)->digest();
+  $res = $c->db->get($key);
+  return $res if $res;
 
+  # not found: get from osm server
+  $c->app->log->debug('Getting from OSM');
+
+  $res = $c->app->ua->post(
+    OSM_API() => {Accept => '*/*'} => form => {data => $query} )->res;
+
+  if ( $res->is_success ) {
+    $c->db->set($key, $res->body) if $key;
+    return $res->body;
+  } else {
+    return $res->message;
+  }
 };
 
 helper settings => sub( $c ) {
@@ -40,25 +65,20 @@ helper settings => sub( $c ) {
   };
 };
 
+# receive boundbox returning consuting query
+post 'geo/bbox' => sub ( $c ) {
+  # TODO: subprocess the bound box
+  my $geojson = $c->req->json;
+  my $res     = $c->query_osm($geojson);
+
+  $res ?  $c->render( json => $res ) :
+	  $c->render( text => "Error getting values", code => 503 );
+} => 'bbox';
+
+# index
 get '/' => sub ( $c ) {
   $c->render(template => 'index', settings => $c->settings);
 } => 'root';
-
-post 'geo/bbox' => sub ( $c ) {
-  $c->app->log->debug('Receiving bound box');
-  $c->render_later;
-
-  # TODO: subprocess the bound box
-  my $geojson = $c->req->json;
-  my $q       = $c->query_osm($geojson);
-
-  $q->then( sub ($tx) {
-    $c->render( json => $tx->result->json );
-  })->catch( sub ($err) {
-    warn "Failed: $err";
-    $c->render( text => $err, code => 503 );
-  });
-} => 'bbox';
 
 app->start;
 

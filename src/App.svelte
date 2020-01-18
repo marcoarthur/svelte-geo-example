@@ -1,15 +1,22 @@
 <script>
 	import leaflet from 'leaflet';
 	import PickAPlace from 'svelte-pick-a-place';
-	import Server from './js/Server.js';
 	import axios from 'axios';
+	import List from './ReorderableList.svelte';
 	let conf = window.__app_settings;
+	let list = [];
+	$: list;
+
 
 	// save the bound box
 	const post_bbox = function (event) {
 
 		axios.post(conf.path.bbox, event.detail)
-			.then( (res) =>  { console.log(res); } )
+			.then( (res) =>  {
+				let ele = JSON.parse(res.data).elements;
+				list = ele.map( (r) => r.tags.name );
+				console.log(list)
+			} )
 			.catch( (error) => { console.log(error) });
 	}
 
@@ -34,5 +41,8 @@
 			on:update={() => console.log('Update!')} 
 			on:save={post_bbox}
 		/>
+		<div class="list-results">
+			<List {list}/>
+		</div>
 	</div>
 </main>
