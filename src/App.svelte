@@ -13,8 +13,7 @@
 
 		axios.post(conf.path.bbox, event.detail)
 			.then( (res) =>  {
-				let ele = JSON.parse(res.data).elements;
-				list = ele.map( (r) => r.tags.name );
+				list = JSON.parse(res.data).elements;
 				console.log(list)
 			} )
 			.catch( (error) => { console.log(error) });
@@ -42,7 +41,7 @@
 			on:save={post_bbox}
 		/>
 		<div class="list-results">
-			<List {list}/>
+			<List list={ list.map((r) => r.tags.name) }/>
 		</div>
 	</div>
 </main>
