@@ -3,20 +3,20 @@ use Mojolicious::Lite -signatures;
 use Mojo::Redis;
 use Digest::MD5;
 use DDP;
+use Mojo::JSON qw( to_json from_json );
 
-use constant {
-  OSM_API => 'https://overpass-api.de/api/interpreter',
-};
+use constant {OSM_API => 'https://overpass-api.de/api/interpreter',};
 
 helper digest => sub {
   state $h = Digest::MD5->new();
 };
 
-helper db => sub { 
+helper db => sub {
   state $redis = Mojo::Redis->new->db;
 };
 
 helper query_osm => sub ($c, $geom) {
+
   # coordinates is giving as [ long, lat ]
   my @coordinates = @{$geom->{geometry}->{coordinates}->[0]};
   my @sorted
@@ -34,24 +34,37 @@ node
 out;
 EOQ
 
-  # check redis first
+  p $query;
+  # check on redis
   my $res = undef;
   my $key = $c->digest->add($query)->digest();
   $res = $c->db->get($key);
-  return $res if $res;
+
+  # redis callback because we already solved
+  my $redis_cb = sub { 
+    my $res = shift;
+    $c->app->log->debug('Redis Code');
+    $c->render( data => to_json($res) );
+  };
+
+  return Mojo::Promise->resolve($res), $redis_cb if $res;
 
   # not found: get from osm server
   $c->app->log->debug('Getting from OSM');
 
-  $res = $c->app->ua->post(
-    OSM_API() => {Accept => '*/*'} => form => {data => $query} )->res;
+  my $p = $c->app->ua->post_p(
+    OSM_API() => {Accept => '*/*'} => form => {data => $query});
 
-  if ( $res->is_success ) {
-    $c->db->set($key, $res->body) if $key;
-    return $res->body;
-  } else {
-    return $res->message;
-  }
+  # osm callback feed cache and render
+  my $osm_cb = sub {
+    $c->app->log->debug('OSM code');
+    my $tx = shift;
+    my $res = $tx->result->body;
+    $c->db->set($key, $res);
+    $c->render( data => to_json($res) );
+  };
+
+  return $p, $osm_cb;
 };
 
 helper settings => sub( $c ) {
@@ -67,12 +80,14 @@ helper settings => sub( $c ) {
 
 # receive boundbox returning consuting query
 post 'geo/bbox' => sub ( $c ) {
+  $c->render_later;
+
   # TODO: subprocess the bound box
   my $geojson = $c->req->json;
-  my $res     = $c->query_osm($geojson);
+  my ($p, $cb) = $c->query_osm($geojson);
 
-  $res ?  $c->render( json => $res ) :
-	  $c->render( text => "Error getting values", code => 503 );
+  $p->then( $cb )
+    ->catch(sub ($err) { $c->render(text => "Error: $err", code => 503); });
 } => 'bbox';
 
 # index
@@ -88,19 +103,19 @@ __DATA__
 % use Mojo::JSON qw(to_json);
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset='utf-8'>
-		<meta name='viewport' content='width=device-width,initial-scale=1'>
+  <head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
 
-		<title>Svelte app</title>
-		<link rel='icon' type='image/png' href='/favicon.png'>
-		<link rel='stylesheet' href='/global.css'>
-		<link rel='stylesheet' href='/build/bundle.css'>
+    <title>Svelte app</title>
+    <link rel='icon' type='image/png' href='/favicon.png'>
+    <link rel='stylesheet' href='/global.css'>
+    <link rel='stylesheet' href='/build/bundle.css'>
 
-        <script>window.__app_settings = <%== to_json $settings %> </script>
-		<script defer src='/build/bundle.js'></script>
-	</head>
+    <script>window.__app_settings = <%== to_json $settings %> </script>
+    <script defer src='/build/bundle.js'></script>
+  </head>
 
-	<body>
-	</body>
+  <body>
+  </body>
 </html>

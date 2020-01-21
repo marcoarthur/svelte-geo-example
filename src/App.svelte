@@ -11,10 +11,12 @@
 	// save the bound box
 	const post_bbox = function (event) {
 
+		console.log('Data sent');
+		console.log(event.detail);
 		axios.post(conf.path.bbox, event.detail)
 			.then( (res) =>  {
+				console.log('Data received');
 				list = JSON.parse(res.data).elements;
-				console.log(list)
 			} )
 			.catch( (error) => { console.log(error) });
 	}
