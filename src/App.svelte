@@ -5,18 +5,25 @@
 	import List from './ReorderableList.svelte';
 	let conf = window.__app_settings;
 	let list = [];
+	let selectionModes = ['polygon'];
 	$: list;
 
 
-	// save the bound box
+	// Map callback
 	const post_bbox = function (event) {
 
-		console.log('Data sent');
-		console.log(event.detail);
+		if ( conf.debug ) {
+			console.log('Data sent to Mojo');
+			console.log(event.detail);
+		}
+
 		axios.post(conf.path.bbox, event.detail)
 			.then( (res) =>  {
-				console.log('Data received');
-				list = JSON.parse(res.data).elements;
+				if ( conf.debug ) {
+					console.log('Data received from Mojo');
+					console.log(res);
+				}
+				list = res.data.elements;
 			} )
 			.catch( (error) => { console.log(error) });
 	}
@@ -39,6 +46,7 @@
 <main>
 	<div class="map-container">
 		<PickAPlace {leaflet}
+			{selectionModes}
 			on:update={() => console.log('Update!')} 
 			on:save={post_bbox}
 		/>

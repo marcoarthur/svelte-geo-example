@@ -3,9 +3,14 @@ use Mojolicious::Lite -signatures;
 use Mojo::Redis;
 use Digest::MD5;
 use DDP;
-use Mojo::JSON qw( to_json from_json );
+use Mojo::JSON qw( to_json );
 
-use constant {OSM_API => 'https://overpass-api.de/api/interpreter',};
+our $VERSION = 0.01;
+
+use constant {
+  OSM_API => 'https://overpass-api.de/api/interpreter',
+  DEBUG   => $ENV{GEOPICKER_DEBUG} || 0,
+};
 
 helper digest => sub {
   state $h = Digest::MD5->new();
@@ -16,6 +21,8 @@ helper db => sub {
 };
 
 helper query_osm => sub ($c, $geom) {
+
+  p $geom if DEBUG;
 
   # coordinates is giving as [ long, lat ]
   my @coordinates = @{$geom->{geometry}->{coordinates}->[0]};
@@ -34,17 +41,18 @@ node
 out;
 EOQ
 
-  p $query;
+  p $query if DEBUG;
+
   # check on redis
   my $res = undef;
   my $key = $c->digest->add($query)->digest();
   $res = $c->db->get($key);
 
   # redis callback because we already solved
-  my $redis_cb = sub { 
+  my $redis_cb = sub {
     my $res = shift;
     $c->app->log->debug('Redis Code');
-    $c->render( data => to_json($res) );
+    $c->render(data => $res, format => 'json');
   };
 
   return Mojo::Promise->resolve($res), $redis_cb if $res;
@@ -53,15 +61,16 @@ EOQ
   $c->app->log->debug('Getting from OSM');
 
   my $p = $c->app->ua->post_p(
-    OSM_API() => {Accept => '*/*'} => form => {data => $query});
+    OSM_API() => {Accept => 'application/json'} => form => {data => $query});
 
   # osm callback feed cache and render
   my $osm_cb = sub {
     $c->app->log->debug('OSM code');
-    my $tx = shift;
+    my $tx  = shift;
     my $res = $tx->result->body;
+    p $res if DEBUG;
     $c->db->set($key, $res);
-    $c->render( data => to_json($res) );
+    $c->render(data => $res, format => 'json');
   };
 
   return $p, $osm_cb;
@@ -75,6 +84,7 @@ helper settings => sub( $c ) {
       url  => $c->url_for('root')->to_abs,
       bbox => $c->url_for('bbox')->to_abs,
     },
+    debug => 1,
   };
 };
 
@@ -86,7 +96,7 @@ post 'geo/bbox' => sub ( $c ) {
   my $geojson = $c->req->json;
   my ($p, $cb) = $c->query_osm($geojson);
 
-  $p->then( $cb )
+  $p->then($cb)
     ->catch(sub ($err) { $c->render(text => "Error: $err", code => 503); });
 } => 'bbox';
 
