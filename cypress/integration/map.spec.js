@@ -1,42 +1,65 @@
 describe('Construct valid polygons in map', () => {
 
-	beforeEach(function () {
-		cy.visit('http://localhost:3000')
-	});
+  beforeEach(function () {
+    cy.visit('http://localhost:3000')
+  });
 
-	it('construct a polygon', () => {
-		// map selector
-		let map = 'div.pick-a-place';
+  it('construct a polygon', () => {
+    const map = 'div.pick-a-place'; // map selector
+    const w = 300; // time to wait (ms)
 
-		// drag the map
-		// TODO: not working checkout this example here
-		// https://github.com/cypress-io/cypress/issues/2255
-		function dragMap(x,y) {
-			cy.get(map).trigger('mouseover')
-			.trigger('mousedown', { force: true }).wait(500)
-			.trigger('mousemove', { which: 1, clientX: x, clientY: y, force: true })
-			.trigger('mouseup', {force: true});
-		}
-		dragMap(100,100);
+    /* 
+     * NOT WORKING NOT WORKING NOT WORKING
+     * drag the map
+     *
+     * TODO: not working checkout this example here
+     * source: https://github.com/cypress-io/cypress/issues/2255
+     * {isTrusted: true, screenX: 785, screenY: 596, clientX: 784, clientY: 451, …}
+    */
+    function dragMap(handler, x,y) {
+      let xAxis =  x > 0 ? '{rightarrow}' : '{leftarrow}';
+      let yAxis =  y > 0 ? '{uparrow}' : '{downarrow}';
+      let i,j;
+      handler.focus()
+      for( i = 0; i < Math.abs(x); i++ ) {
+        handler.type(xAxis).wait(w)
+      }
+      for( j = 0; j < Math.abs(y); j++ ) {
+        handler.type(yAxis).wait(w)
+      }
+    }
 
-		// zoom-in
-		const w = 800;
-		var i;
-		let handler;
-		handler = cy.get('a.leaflet-control-zoom-in');
-		for (i = 0; i < 5; i++) { 
-			handler.click().wait(w);
-		}
+    function zoom(handler, level) {
+      let i;
+      for (i = 0; i < level; i++) { 
+        handler.click().wait(w);
+      }
+    }
 
-		// make a polygon
-		let points = ['bottomLeft', 'bottom', 'right', 'left', 'bottomLeft'];
-		handler = cy.get(map);
-		for (i = 0; i < points.length; i++) {
-			handler = handler.click(points[i]).wait(w);
-		}
+    // drag the map
+    dragMap(cy.get(map),-3,-5);
 
-		// the buttons panel should appear
-		handler.get('.pick-a-place__button-panel').children().should('be.visible');
+    // zoom-in
+    zoom(cy.get('a.leaflet-control-zoom-in'), 11)
+
+    // make a polygon
+    let points = ['bottomLeft', 'bottom', 'right', 'left', 'bottomLeft'];
+    let handler = cy.get(map);
+    for (let i = 0; i < points.length; i++) {
+      handler = handler.click(points[i]).wait(w);
+    }
+
+    // check the buttons panel should appear
+    cy.get('.pick-a-place__button-panel').children().should('be.visible');
+
+    // check actions buttons
+    cy.get('button.pick-a-place__button').should( ($p) => {
+      expect($p).to.have.length(3);
+      expect($p.first()).to.contain('Cancel');
+    });
+
+    // Submit polygon and check results
+    cy.get('button.pick-a-place__button:nth-child(3)').click();
 
   });
 });
