@@ -107,6 +107,62 @@ get '/' => sub ( $c ) {
 
 app->start;
 
+=encoding utf8
+
+=head1 NAME
+
+geo_picker - backend of Svelte app to draw a polygon and search into it.
+
+=head1 SYNOPSIS
+
+  ./geo_picker daemon -l http://*:3000
+
+=head1 DESCRIPTION
+
+This is a Mojo's backend application that searches using
+L<OSM|https://wiki.openstreetmap.org/wiki/Overpass_API> for any place tagged as
+school.
+
+The client application sends (POST) a polygon using GeoJSON spec and we
+construct an OSM query fitting a boundbox that contains the polygon, and send
+the results back to the client. We search into the boundbox all
+nodes/ways/relations tagged with "school". Also, saving the results, effectively
+caching it.
+
+=head1 HELPERS
+
+=head2 digest
+
+MD5 digest helper.
+  $c->digest->add($content)
+  $c->digest->digest() # returns hash code for $content
+
+=head2 db
+
+Redis database to save previous queries, saving to hit OSM again.
+  my $content = $c->db->get($c->digest->digest);
+  if ( $content ) { say "Content from Redis db: $content" }
+
+=head2 query_osm ($geom)
+
+Queries the OSM given the C<$geom> from client. Returns a promise and the
+callback to be called if success.
+
+=head2 settings
+
+Returns a hash containing settings to the front end application, such as routes
+and debug settings.
+
+=head1 AUTHOR
+
+Marco Arthur
+
+=head1 COPYRIGHT AND LICENSE
+
+Same as Perl itself.
+
+=cut
+
 __DATA__
 
 @@ index.html.ep

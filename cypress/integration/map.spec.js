@@ -9,12 +9,8 @@ describe('Construct valid polygons in map', () => {
     const w = 300; // time to wait (ms)
 
     /* 
-     * NOT WORKING NOT WORKING NOT WORKING
-     * drag the map
-     *
-     * TODO: not working checkout this example here
+     * TODO: not working with mouse events. Checkout this example here
      * source: https://github.com/cypress-io/cypress/issues/2255
-     * {isTrusted: true, screenX: 785, screenY: 596, clientX: 784, clientY: 451, …}
     */
     function dragMap(handler, x,y) {
       let xAxis =  x > 0 ? '{rightarrow}' : '{leftarrow}';
