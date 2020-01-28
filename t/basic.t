@@ -18,7 +18,7 @@ my $data = decode_json( $file->slurp );
 
 for my $d (@$data) {
     my $res = $t->tx->res->json;
-    $t->post_ok('/geo/bbox' =>  { Accept => '*/*' } => json => $d)
+    $t->post_ok('/geo/bbox' =>  { Accept => 'json/application' } => json => $d)
     ->status_is(200)
     ->json_has('/version')
     ->json_has('/elements')
