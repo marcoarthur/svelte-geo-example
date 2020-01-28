@@ -30,7 +30,8 @@ helper db => sub {
 #   $geojson: A GeoJSON structure
 #
 # Returns:
-#   $query:
+#   $str: A well defined bound box format separated by comma, ex:
+#   -43.48,-19.81,-42.5,-19.01
 #
 sub geojson_to_bbox( $geojson ) {
 
@@ -82,42 +83,23 @@ EOQ
   return $query;
 }
 
-helper query_osm => sub ($c, $geom) {
-  p $geom if DEBUG;
-
-  my $bbox   = geojson_to_bbox( $geom );
-  my $query  = build_osm_query( $bbox );
-
-  p $query if DEBUG;
-
-  my ($key, $data) = check_cache( $query );
-
-  # redis callback because we already solved
-  my $redis_cb = sub {
-    my $res = shift;
-    $c->app->log->debug('Redis Code');
-    $c->render(data => $res, format => 'json');
-  };
-
-  return Mojo::Promise->resolve($data), $redis_cb if $data;
-
-  # not found: get from osm server
+helper query_osm => sub ($c, $query) {
   $c->app->log->debug('Getting from OSM');
 
-  my $p = $c->app->ua->post_p(
-    OSM_API() => {Accept => 'application/json'} => form => {data => $query});
-
-  # osm callback feed cache and render
-  my $osm_cb = sub {
-    $c->app->log->debug('OSM code');
-    my $tx  = shift;
-    my $res = $tx->result->body;
-    p $res if DEBUG;
-    $c->db->set($key, $res);
-    $c->render(data => $res, format => 'json');
-  };
-
-  return $p, $osm_cb;
+  $c->app->ua->post_p(
+    OSM_API() => {Accept => 'application/json'} => form => {data => $query})
+    ->then(
+      sub ($tx) {
+        my $res = $tx->result->body;
+        my $key = $c->digest->add($query)->digest();
+        $c->db->set($key, $res);
+        p $res if DEBUG;
+        $c->render(data => $res, format => 'json');
+    })->catch( sub ( $err ) {
+      warn "Error retrieving from OSM $err";
+      p $query;
+      $c->render(text => "Error: $err", code => 503);
+    });
 };
 
 helper settings => sub( $c ) {
@@ -138,13 +120,23 @@ post 'geo/bbox' => sub ( $c ) {
 
   # TODO: subprocess the bound box
   my $geojson = $c->req->json;
-  my ($p, $cb) = $c->query_osm($geojson);
+  my $bbox   = geojson_to_bbox( $geojson );
+  my $query  = build_osm_query( $bbox );
 
-  $p->then($cb)
-    ->catch(sub ($err) { $c->render(text => "Error: $err", code => 503); });
+  p $query if DEBUG;
+
+  # try from cache
+  my ($key, $data) = check_cache( $query );
+  if ( $data ) {
+    $c->app->log->debug('Found in Cache');
+    $c->render(data => $data, format => 'json');
+    return;
+  };
+
+  # not found in cache: get from osm
+  $c->query_osm($query);
 } => 'bbox';
 
-# index
 get '/' => sub ( $c ) {
   $c->render(template => 'index', settings => $c->settings);
 } => 'root';
@@ -189,8 +181,8 @@ Redis database to save previous queries, saving to hit OSM again.
 
 =head2 query_osm ($geom)
 
-Queries the OSM given the C<$geom> from client. Returns a promise and the
-callback to be called if success.
+Queries the OSM given an OSM C<$query>.  Renders the result to client or
+sends an http error.
 
 =head2 settings
 
