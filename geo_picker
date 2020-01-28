@@ -84,7 +84,7 @@ EOQ
   return $query;
 }
 
-helper query_osm => sub ($c, $query) {
+sub query_osm($c, $query) {
   $c->app->log->debug('Getting from OSM');
 
   $c->app->ua->post_p(
@@ -101,7 +101,9 @@ helper query_osm => sub ($c, $query) {
       p $query;
       $c->render(text => "Error: $err", code => 503);
     });
-};
+}
+
+helper query_osm => \&query_osm;
 
 helper settings => sub( $c ) {
 
@@ -116,7 +118,7 @@ helper settings => sub( $c ) {
 };
 
 # receive boundbox returning consulting query
-post 'geo/bbox' => sub ( $c ) {
+sub geo_bbox ( $c ) {
   $c->render_later;
 
   # TODO: subprocess the bound box
@@ -136,7 +138,9 @@ post 'geo/bbox' => sub ( $c ) {
 
   # not found in cache: get from osm
   $c->query_osm($query);
-} => 'bbox';
+}
+
+post 'geo/bbox' => \&geo_bbox => 'bbox';
 
 get '/' => sub ( $c ) {
   $c->render(template => 'index', settings => $c->settings);
