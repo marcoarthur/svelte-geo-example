@@ -23,7 +23,7 @@ helper db => sub {
 #
 # Get a geojson polygon and return a bound box.
 #
-# A bound box is a Rectangular coordinates (bottomLeft upRight) 
+# A bound box is a Rectangular coordinates (bottomLeft upRight)
 # that surround the polygon.
 #
 # Input:
@@ -42,7 +42,7 @@ sub geojson_to_bbox( $geojson ) {
   my $upper  = pop @sorted;
 
   # osm query requires [ lat, long ]
-  my $str   = join(',', reverse(@$bottom), reverse(@$upper));
+  my $str = join(',', reverse(@$bottom), reverse(@$upper));
   return $str;
 }
 
@@ -54,7 +54,7 @@ sub geojson_to_bbox( $geojson ) {
 # Input: ($query)
 #   $query: OSM overpass turbo query
 #
-# Returns: ($key, $data) 
+# Returns: ($key, $data)
 #   $key: the cache calculated key
 #   $data: the cache data or undef
 sub check_cache( $query ) {
@@ -84,25 +84,23 @@ EOQ
   return $query;
 }
 
-sub query_osm($c, $query) {
+sub query_osm ($c, $query) {
   $c->app->log->debug('Getting from OSM');
 
   $c->app->ua->post_p(
     OSM_API() => {Accept => 'application/json'} => form => {data => $query})
-    ->then(
-      sub ($tx) {
-        my $res = $tx->result->body;
-        my $key = $c->digest->add($query)->digest();
-        $c->db->set($key, $res);
-        p $res if DEBUG;
-        $c->render(data => $res, format => 'json');
-    })->catch( sub ( $err ) {
-      warn "Error retrieving from OSM $err";
-      p $query;
-      $c->render(text => "Error: $err", code => 503);
+    ->then(sub ($tx) {
+    my $res = $tx->result->body;
+    my $key = $c->digest->add($query)->digest();
+    $c->db->set($key, $res);
+    p $res if DEBUG;
+    $c->render(data => $res, format => 'json');
+    })->catch(sub ( $err ) {
+    warn "Error retrieving from OSM $err";
+    p $query;
+    $c->render(text => "Error: $err", code => 503);
     });
 }
-
 helper query_osm => \&query_osm;
 
 helper settings => sub( $c ) {
@@ -117,29 +115,28 @@ helper settings => sub( $c ) {
   };
 };
 
-# receive boundbox returning consulting query
+# route to geo/bbox
 sub geo_bbox ( $c ) {
   $c->render_later;
 
   # TODO: subprocess the bound box
   my $geojson = $c->req->json;
-  my $bbox   = geojson_to_bbox( $geojson );
-  my $query  = build_osm_query( $bbox );
+  my $bbox    = geojson_to_bbox($geojson);
+  my $query   = build_osm_query($bbox);
 
   p $query if DEBUG;
 
   # try from cache
-  my ($key, $data) = check_cache( $query );
-  if ( $data ) {
+  my ($key, $data) = check_cache($query);
+  if ($data) {
     $c->app->log->debug('Found in Cache');
     $c->render(data => $data, format => 'json');
     return;
-  };
+  }
 
   # not found in cache: get from osm
   $c->query_osm($query);
 }
-
 post 'geo/bbox' => \&geo_bbox => 'bbox';
 
 get '/' => sub ( $c ) {
