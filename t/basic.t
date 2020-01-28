@@ -17,9 +17,14 @@ my $file = Mojo::File->new('./t/data/geo_bbox.json');
 my $data = decode_json( $file->slurp );
 
 for my $d (@$data) {
+    my $res = $t->tx->res->json;
     $t->post_ok('/geo/bbox' =>  { Accept => '*/*' } => json => $d)
     ->status_is(200)
     ->json_has('/version')
-    ->json_has('/elements');
+    ->json_has('/elements')
+    ->json_has('/generator')
+    ->json_has('/osm3s')
+    ->or( sub { diag explain $res } );
 }
+
 done_testing;
