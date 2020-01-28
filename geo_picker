@@ -55,7 +55,8 @@ sub geojson_to_bbox( $geojson ) {
 #   $query: OSM overpass turbo query
 #
 # Returns: ($key, $data) 
-#   Returns the promise and the fullfilled callback to be run.
+#   $key: the cache calculated key
+#   $data: the cache data or undef
 sub check_cache( $query ) {
 
   my $key = app->digest->add($query)->digest();
@@ -63,7 +64,7 @@ sub check_cache( $query ) {
 }
 
 #
-# Build an OSM query given bbox
+# Build an OSM query given a bbox
 # Input: ($bbox)
 #   $bbox: is an OSM format for boundbox
 #
@@ -114,7 +115,7 @@ helper settings => sub( $c ) {
   };
 };
 
-# receive boundbox returning consuting query
+# receive boundbox returning consulting query
 post 'geo/bbox' => sub ( $c ) {
   $c->render_later;
 
@@ -147,7 +148,7 @@ app->start;
 
 =head1 NAME
 
-geo_picker - backend of Svelte app to draw a polygon and search into it.
+geo_picker - Backend of a Svelte app that draws a polygon and search into it.
 
 =head1 SYNOPSIS
 
