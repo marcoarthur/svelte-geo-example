@@ -20,12 +20,21 @@ helper db => sub {
   state $redis = Mojo::Redis->new->db;
 };
 
-helper query_osm => sub ($c, $geom) {
+#
+# Get a geojson polygon and return a bound box.
+#
+# A bound box is a Rectangular coordinates (bottomLeft upRight) 
+# that surround the polygon.
+#
+# Input:
+#   $geojson: A GeoJSON structure
+#
+# Returns:
+#   $query:
+#
+sub geojson_to_bbox( $geojson ) {
 
-  p $geom if DEBUG;
-
-  # coordinates is giving as [ long, lat ]
-  my @coordinates = @{$geom->{geometry}->{coordinates}->[0]};
+  my @coordinates = @{$geojson->{geometry}->{coordinates}->[0]};
   my @sorted
     = sort { $a->[0] <=> $b->[0] and $a->[1] <=> $b->[1] } @coordinates;
   my $bottom = shift @sorted;
@@ -33,20 +42,55 @@ helper query_osm => sub ($c, $geom) {
 
   # osm query requires [ lat, long ]
   my $str   = join(',', reverse(@$bottom), reverse(@$upper));
+  return $str;
+}
+
+
+#
+# Check if we have this query cached. Returning calculated key
+# and cached data
+#
+# Input: ($query)
+#   $query: OSM overpass turbo query
+#
+# Returns: ($key, $data) 
+#   Returns the promise and the fullfilled callback to be run.
+sub check_cache( $query ) {
+
+  my $key = app->digest->add($query)->digest();
+  return $key, app->db->get($key);
+}
+
+#
+# Build an OSM query given bbox
+# Input: ($bbox)
+#   $bbox: is an OSM format for boundbox
+#
+# Returns: ($query)
+#   An OSM Overpass Turbo valid query
+#
+sub build_osm_query( $bbox ) {
+
   my $query = <<EOQ;
 [out:json];
 node
   [amenity=school]
-  ($str);
+  ($bbox);
 out;
 EOQ
 
+  return $query;
+}
+
+helper query_osm => sub ($c, $geom) {
+  p $geom if DEBUG;
+
+  my $bbox   = geojson_to_bbox( $geom );
+  my $query  = build_osm_query( $bbox );
+
   p $query if DEBUG;
 
-  # check on redis
-  my $res = undef;
-  my $key = $c->digest->add($query)->digest();
-  $res = $c->db->get($key);
+  my ($key, $data) = check_cache( $query );
 
   # redis callback because we already solved
   my $redis_cb = sub {
@@ -55,7 +99,7 @@ EOQ
     $c->render(data => $res, format => 'json');
   };
 
-  return Mojo::Promise->resolve($res), $redis_cb if $res;
+  return Mojo::Promise->resolve($data), $redis_cb if $data;
 
   # not found: get from osm server
   $c->app->log->debug('Getting from OSM');
