@@ -89,16 +89,18 @@ sub query_osm ($c, $query) {
 
   $c->app->ua->post_p(
     OSM_API() => {Accept => 'application/json'} => form => {data => $query})
-    ->then(sub ($tx) {
-    my $res = $tx->result->body;
-    my $key = $c->digest->add($query)->digest();
-    $c->db->set($key, $res);
-    p $res if DEBUG;
-    $c->render(data => $res, format => 'json');
-    })->catch(sub ( $err ) {
-    warn "Error retrieving from OSM $err";
-    p $query;
-    $c->render(text => "Error: $err", code => 503);
+    ->then(
+      sub ($tx) {
+          my $res = $tx->result->body;
+          my $key = $c->digest->add($query)->digest();
+          $c->db->set($key, $res);
+          p $res if DEBUG;
+          $c->render(data => $res, format => 'json');
+    })->catch(
+      sub ( $err ) {
+          warn "Error retrieving from OSM $err";
+          p $query;
+          $c->render(text => "Error: $err", code => 503);
     });
 }
 helper query_osm => \&query_osm;
