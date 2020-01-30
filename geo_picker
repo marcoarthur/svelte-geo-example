@@ -26,7 +26,7 @@ helper db => sub {
 # A bound box is a Rectangular coordinates (bottomLeft upRight)
 # that surround the polygon.
 #
-# Input:
+# Input ($geojson):
 #   $geojson: A GeoJSON structure
 #
 # Returns:
@@ -49,7 +49,7 @@ sub geojson_to_bbox( $geojson ) {
 
 #
 # Check if we have this query cached. Returning calculated key
-# and cached data
+# and cached data.
 #
 # Input: ($query)
 #   $query: OSM overpass turbo query
@@ -59,12 +59,12 @@ sub geojson_to_bbox( $geojson ) {
 #   $data: the cache data or undef
 sub check_cache( $query ) {
 
-  my $key = app->digest->add($query)->digest();
+  my $key = app->digest->add($query)->hexdigest();
   return $key, app->db->get($key);
 }
 
 #
-# Build an OSM query given a bbox
+# Build an OSM query given a bbox.
 # Input: ($bbox)
 #   $bbox: is an OSM format for boundbox
 #
@@ -85,14 +85,14 @@ EOQ
 }
 
 sub query_osm ($c, $query) {
-  $c->app->log->debug('Getting from OSM');
 
+  $c->app->log->debug('Getting from OSM');
   $c->app->ua->post_p(
     OSM_API() => {Accept => 'application/json'} => form => {data => $query})
     ->then(
       sub ($tx) {
           my $res = $tx->result->body;
-          my $key = $c->digest->add($query)->digest();
+          my $key = $c->digest->add($query)->hexdigest();
           $c->db->set($key, $res);
           p $res if DEBUG;
           $c->render(data => $res, format => 'json');
@@ -119,6 +119,7 @@ helper settings => sub( $c ) {
 
 # route to geo/bbox
 sub geo_bbox ( $c ) {
+
   $c->render_later;
 
   # TODO: subprocess the bound box
@@ -160,14 +161,13 @@ geo_picker - Backend of a Svelte app that draws a polygon and search into it.
 =head1 DESCRIPTION
 
 This is a Mojo's backend application that searches using
-L<OSM|https://wiki.openstreetmap.org/wiki/Overpass_API> for any place tagged as
+L<OSM|https://wiki.openstreetmap.org/wiki/Overpass_API> for places tagged as
 school.
 
 The client application sends (POST) a polygon using GeoJSON spec and we
-construct an OSM query fitting a boundbox that contains the polygon, and send
-the results back to the client. We search into the boundbox all
-nodes/ways/relations tagged with "school". Also, saving the results, effectively
-caching it.
+construct an OSM query fitting a boundbox that contains the polygon.
+The result is an OSM search whitin the boundbox for all
+nodes/ways/relations tagged as "school". We save the results, caching it.
 
 =head1 HELPERS
 
@@ -179,19 +179,18 @@ MD5 digest helper.
 
 =head2 db
 
-Redis database to save previous queries, saving to hit OSM again.
+Redis database handler (cache handler)
   my $content = $c->db->get($c->digest->digest);
   if ( $content ) { say "Content from Redis db: $content" }
 
-=head2 query_osm ($geom)
+=head2 query_osm ($query)
 
-Queries the OSM given an OSM C<$query>.  Renders the result to client or
-sends an http error.
+Send Queries to OSM given an OSM C<$query>. Rendering the results to client or
+rendering an error, if not possible.
 
 =head2 settings
 
-Returns a hash containing settings to the front end application, such as routes
-and debug settings.
+Settings to the front end application, such as routes and debug flag.
 
 =head1 AUTHOR
 
