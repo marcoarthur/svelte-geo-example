@@ -10,14 +10,15 @@ our $VERSION = 0.01;
 use constant {
   OSM_API => 'https://overpass-api.de/api/interpreter',
   DEBUG   => $ENV{GEOPICKER_DEBUG} || 0,
+  REDIS   => $ENV{REDIS} || "",
 };
 
 helper digest => sub {
   state $h = Digest::MD5->new();
 };
 
-helper db => sub {
-  state $redis = Mojo::Redis->new->db;
+helper redis => sub {
+  state $redis = Mojo::Redis->new( REDIS ) || die "Can't connect";
 };
 
 #
@@ -60,7 +61,7 @@ sub geojson_to_bbox( $geojson ) {
 sub check_cache( $query ) {
 
   my $key = app->digest->add($query)->hexdigest();
-  return $key, app->db->get($key);
+  return $key, app->redis->db->get($key);
 }
 
 #
@@ -93,7 +94,7 @@ sub query_osm ($c, $query) {
       sub ($tx) {
           my $res = $tx->result->body;
           my $key = $c->digest->add($query)->hexdigest();
-          $c->db->set($key, $res);
+          $c->redis->db->set($key, $res);
           p $res if DEBUG;
           $c->render(data => $res, format => 'json');
     })->catch(
@@ -177,10 +178,10 @@ MD5 digest helper.
   $c->digest->add($content)
   $c->digest->digest() # returns hash code for $content
 
-=head2 db
+=head2 redis
 
 Redis database handler (cache handler)
-  my $content = $c->db->get($c->digest->digest);
+  my $content = $c->redis->get($c->digest->digest);
   if ( $content ) { say "Content from Redis db: $content" }
 
 =head2 query_osm ($query)
