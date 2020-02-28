@@ -7,6 +7,14 @@ use Mojo::JSON qw( to_json );
 
 our $VERSION = 0.01;
 
+plugin Webpack => {
+    process      => [qw(svelte css js)],
+    dependencies => {
+      core => 'rollup',
+      svelte => [qw(rollup-plugin-svelte svelte)]
+    },
+};
+
 use constant {
   OSM_API => 'https://overpass-api.de/api/interpreter',
   DEBUG   => $ENV{GEOPICKER_DEBUG} || 0,
@@ -216,12 +224,12 @@ __DATA__
     <title>Svelte app</title>
     <link rel='icon' type='image/png' href='/favicon.png'>
     <link rel='stylesheet' href='/global.css'>
-    <link rel='stylesheet' href='/build/bundle.css'>
+    %= asset "app.css"
 
     <script>window.__app_settings = <%== to_json $settings %> </script>
-    <script defer src='/build/bundle.js'></script>
   </head>
 
   <body>
+    %= asset "app.js"
   </body>
 </html>
