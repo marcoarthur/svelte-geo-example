@@ -11,4 +11,6 @@ on test => sub {
     requires 'Test::More';
 };
 
-
+on 'develop' => sub {
+    recommends 'Mojolicious::Plugin::Webpack';
+};
