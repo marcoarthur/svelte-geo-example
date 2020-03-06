@@ -2,11 +2,12 @@
   "name": "svelte-app",
   "version": "1.0.0",
   "scripts": {
-    "build": "rollup -c",
+    "build": "rollup -c --environment production",
     "dev": "rollup -c -w",
-    "start": "sirv public",
+    "start": "./geo_picker webpack -c rollup.config.js",
     "cypress": "cypress open",
-    "cy:run": "cypress run"
+    "cy:run": "cypress run",
+    "test": "./geo_picker daemon -m production & cypress run"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^11.0.0",
