@@ -9,8 +9,6 @@ my $t = Test::Mojo->new($script);
 
 # get all necessary things in frontend
 $t->get_ok('/')->status_is(200);
-$t->get_ok('/build/bundle.css');
-$t->get_ok('/build/bundle.js');
 
 # post to a bound box get results
 my $file = Mojo::File->new('./t/data/geo_bbox.json');
