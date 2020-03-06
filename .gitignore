@@ -1,5 +1,9 @@
 /node_modules/
 /public/build/
+/public/asset
+/assets
+/cypress/videos
+/cover_db
 *.swp
 
 .DS_Store
